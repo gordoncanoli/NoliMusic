@@ -104,22 +104,21 @@ const KEY_DATA = {
 };
 
 const CHROMATIC_MAJOR = ['C major','C# major','D major','D# major','E major','F major','F# major','G major','G# major','A major','A# major','B major'];
+const CHROMATIC_MINOR = ['C minor','C# minor','D minor','D# minor','E minor','F minor','F# minor','G minor','G# minor','A minor','A# minor','B minor'];
 
 function semitoneToKey(originalKey, semitones) {
   const idx = CHROMATIC_MAJOR.indexOf(originalKey);
-  if (idx === -1) {
-    // handle minor keys
-    if (originalKey === 'E minor') {
-      const minors = ['A minor','A# minor','B minor','C minor','C# minor','D minor','D# minor','E minor','F minor','F# minor','G minor','G# minor'];
-      const mi = minors.indexOf(originalKey);
-      const newIdx = ((mi + semitones) % 12 + 12) % 12;
-      const result = minors[newIdx];
-      return KEY_DATA[result] ? result : 'G major';
-    }
-    return 'G major';
+  if (idx !== -1) {
+    const newIdx = ((idx + semitones) % 12 + 12) % 12;
+    return CHROMATIC_MAJOR[newIdx];
   }
-  const newIdx = ((idx + semitones) % 12 + 12) % 12;
-  return CHROMATIC_MAJOR[newIdx];
+  const minorIdx = CHROMATIC_MINOR.indexOf(originalKey);
+  if (minorIdx !== -1) {
+    const newIdx = ((minorIdx + semitones) % 12 + 12) % 12;
+    const result = CHROMATIC_MINOR[newIdx];
+    return KEY_DATA[result] ? result : 'G major';
+  }
+  return 'G major';
 }
 
 // --- SPOTIFY AUTH ---
@@ -231,6 +230,22 @@ function logout() {
   localStorage.removeItem('token_expiry');
   localStorage.removeItem('code_verifier');
   renderApp();
+}
+
+// --- MANIFEST ARTWORK ENRICHMENT ---
+async function enrichManifestArtwork(container) {
+  const arts = container.querySelectorAll('[data-search-stub]');
+  for (const art of arts) {
+    const q = art.getAttribute('data-search-stub');
+    try {
+      const data = await spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=track&limit=1`);
+      const url = data?.tracks?.items?.[0]?.album?.images?.[0]?.url;
+      if (url) {
+        art.removeAttribute('data-search-stub');
+        art.innerHTML = `<img src="${url}" width="46" height="46" style="border-radius:6px" loading="lazy" />`;
+      }
+    } catch(e) {}
+  }
 }
 
 // --- MANIFEST MATCHING ---
@@ -651,13 +666,10 @@ function renderMiniPlayer() {
       fontSize: '22px', cursor: 'pointer', padding: '4px',
       display: 'flex', alignItems: 'center', flexShrink: '0',
     }),
-    onClick: (e) => {
+    onClick: async (e) => {
       e.stopPropagation();
-      if (isPlaying) { pauseAudio(); }
-      else {
-        const shift = manifest ? manifest.semitonsToG + state.pitchOffset : 0;
-        resumeAudio(shift);
-      }
+      if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
+      if (isPlaying) { pauseAudio(); } else { resumeAudio(getActiveShift()); }
       renderMiniPlayerOnly();
     }
   });
@@ -867,7 +879,7 @@ function renderSongsList(container) {
   toggleRow.appendChild(toggleTrack);
   toggleRow.appendChild(el('span', { style: { fontSize: '12px', color: S.textMuted, fontFamily: "'DM Sans',sans-serif" } }, 'Playable songs only'));
   if (state.showPlayableOnly) {
-    const playableCount = getSortedSongs().filter(t => { const m = findManifestMatch(t); return m && m.mp3Url; }).length;
+    const playableCount = SONG_MANIFEST.filter(m => m.mp3Url).length;
     toggleRow.appendChild(el('span', { style: { fontSize: '11px', color: S.green, fontWeight: '700' } }, playableCount + ' songs'));
   }
   controlsBar.appendChild(toggleRow);
@@ -905,7 +917,12 @@ function renderSongsList(container) {
     const art = el('div', {
       style: css({ width: '46px', height: '46px', borderRadius: '6px', background: S.surface2, flexShrink: '0', overflow: 'hidden' })
     });
-    if (imgUrl) art.innerHTML = `<img src="${imgUrl}" width="46" height="46" style="border-radius:6px" loading="lazy" />`;
+    if (imgUrl) {
+      art.innerHTML = `<img src="${imgUrl}" width="46" height="46" style="border-radius:6px" loading="lazy" />`;
+    } else if (track.id && track.id.startsWith('_manifest_')) {
+      const m = manifests ? manifests[i] : null;
+      if (m) art.setAttribute('data-search-stub', `${m.title} ${m.artist}`);
+    }
     const info = el('div', { style: { flex: '1', overflow: 'hidden' } },
       el('div', { style: { fontSize: '14px', fontWeight: '500', color: S.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, track.name),
       el('div', { style: { fontSize: '12px', color: S.textMuted, marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
@@ -925,6 +942,8 @@ function renderSongsList(container) {
       container.appendChild(el('div', { style: { height: '1px', background: S.border, margin: '0 20px 0 78px' } }));
     }
   });
+
+  if (state.showPlayableOnly) enrichManifestArtwork(container);
 }
 
 function renderPlaylistsGrid(container) {
@@ -1370,7 +1389,7 @@ function renderNowPlaying() {
     style: { display: 'flex', background: 'rgba(255,255,255,0.08)', borderRadius: '12px', padding: '3px', gap: '2px' }
   });
   ['noli', 'original', 'manual'].forEach(mode => {
-    const labels = { noli: 'Noli', original: 'Original', manual: 'Manual' };
+    const labels = { noli: 'Noli Mode', original: 'Original', manual: 'Manual' };
     const active = state.nowPlayingMode === mode;
     const btn = el('button', {
       style: {
@@ -1400,8 +1419,27 @@ function renderNowPlaying() {
     keyLeft.appendChild(el('div', { style: { fontSize: '10px', fontWeight: '700', color: 'rgba(255,255,255,0.35)', letterSpacing: '1.5px', marginBottom: '3px' } }, 'KEY'));
     keyLeft.appendChild(el('div', { id: 'np-key-display', style: { fontSize: '28px', fontWeight: '800', color: S.green, letterSpacing: '-1px', lineHeight: '1' } }, formatKeyShort(displayKey)));
     const keyRight = el('div', { style: { textAlign: 'right' } });
-    keyRight.appendChild(el('div', { style: { fontSize: '10px', fontWeight: '700', color: 'rgba(255,255,255,0.35)', letterSpacing: '1.5px', marginBottom: '3px' } }, 'SHIFT'));
-    keyRight.appendChild(el('div', { id: 'np-shift-display', style: { fontSize: '28px', fontWeight: '800', color: 'rgba(255,255,255,0.7)', letterSpacing: '-1px', lineHeight: '1', fontFamily: "'DM Mono',monospace" } }, shift === 0 ? '0' : shift > 0 ? `+${shift}` : `${shift}`));
+    keyRight.appendChild(el('div', { style: { fontSize: '10px', fontWeight: '700', color: 'rgba(255,255,255,0.35)', letterSpacing: '1.5px', marginBottom: '3px' } }, 'MODULATION'));
+    if (state.nowPlayingMode === 'manual') {
+      const shiftCtrl = el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end' } });
+      const mBtn = el('button', {
+        style: { width: '30px', height: '30px', borderRadius: '50%', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: '0' },
+        onClick: () => { state.manualSemitone = getActiveShift() - 1; state.manualTargetKey = null; applyCurrentShift(); rerenderNowPlaying(); }
+      });
+      mBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M19 13H5v-2h14v2z"/></svg>`;
+      const shiftNum = el('div', { id: 'np-shift-display', style: { fontSize: '24px', fontWeight: '800', color: 'rgba(255,255,255,0.7)', letterSpacing: '-1px', lineHeight: '1', fontFamily: "'DM Mono',monospace", minWidth: '32px', textAlign: 'center' } }, shift === 0 ? '0' : shift > 0 ? `+${shift}` : `${shift}`);
+      const pBtn = el('button', {
+        style: { width: '30px', height: '30px', borderRadius: '50%', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: '0' },
+        onClick: () => { state.manualSemitone = getActiveShift() + 1; state.manualTargetKey = null; applyCurrentShift(); rerenderNowPlaying(); }
+      });
+      pBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>`;
+      shiftCtrl.appendChild(mBtn);
+      shiftCtrl.appendChild(shiftNum);
+      shiftCtrl.appendChild(pBtn);
+      keyRight.appendChild(shiftCtrl);
+    } else {
+      keyRight.appendChild(el('div', { id: 'np-shift-display', style: { fontSize: '28px', fontWeight: '800', color: 'rgba(255,255,255,0.7)', letterSpacing: '-1px', lineHeight: '1', fontFamily: "'DM Mono',monospace" } }, shift === 0 ? '0' : shift > 0 ? `+${shift}` : `${shift}`));
+    }
     keyBlock.appendChild(keyLeft);
     keyBlock.appendChild(keyRight);
     scroll.appendChild(keyBlock);
@@ -1445,49 +1483,39 @@ function renderNowPlaying() {
       scroll.appendChild(manualWrap);
     }
 
-    // Noli pitch nudge
-    if (state.nowPlayingMode === 'noli') {
-      const nudgeRow = el('div', { style: { margin: '10px 24px 0', display: 'flex', alignItems: 'center', gap: '12px' } });
-      const minusBtn = el('button', {
-        style: { width: '34px', height: '34px', borderRadius: '50%', border: '1px solid rgba(255,255,255,0.15)', background: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: '0' },
-        onClick: () => { if (state.pitchOffset > -6) { state.pitchOffset--; applyCurrentShift(); rerenderNowPlaying(); } }
-      });
-      minusBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M19 13H5v-2h14v2z"/></svg>`;
-      const nudgeTrack = el('div', { style: { flex: '1', height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.1)', position: 'relative' } });
-      nudgeTrack.appendChild(el('div', { style: { position: 'absolute', left: '0', top: '0', height: '100%', borderRadius: '2px', background: S.green, width: `${((state.pitchOffset + 6) / 12) * 100}%` } }));
-      const plusBtn = el('button', {
-        style: { width: '34px', height: '34px', borderRadius: '50%', border: '1px solid rgba(255,255,255,0.15)', background: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: '0' },
-        onClick: () => { if (state.pitchOffset < 6) { state.pitchOffset++; applyCurrentShift(); rerenderNowPlaying(); } }
-      });
-      plusBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>`;
-      const resetBtn = el('button', {
-        style: { background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', flexShrink: '0' },
-        onClick: () => { state.pitchOffset = 0; applyCurrentShift(); rerenderNowPlaying(); }
-      }, 'Reset');
-      nudgeRow.appendChild(minusBtn);
-      nudgeRow.appendChild(nudgeTrack);
-      nudgeRow.appendChild(plusBtn);
-      nudgeRow.appendChild(resetBtn);
-      scroll.appendChild(nudgeRow);
-    }
   } else {
     scroll.appendChild(el('div', { style: { margin: '10px 24px 0', fontSize: '12px', color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' } }, 'Playing in original key'));
   }
 
-  // Progress bar with touch support
+  // Progress bar with drag support
   const progressWrap = el('div', { style: { margin: '12px 24px 0' } });
-  const seekBar = el('div', { style: { height: '6px', borderRadius: '3px', background: 'rgba(255,255,255,0.12)', position: 'relative', cursor: 'pointer' } });
-  const seekFill = el('div', { id: 'np-seek-fill', style: { position: 'absolute', left: '0', top: '0', height: '100%', borderRadius: '3px', background: '#fff', width: '0%' } });
-  const seekThumb = el('div', { id: 'np-seek-thumb', style: { position: 'absolute', top: '50%', transform: 'translate(-50%,-50%)', width: '14px', height: '14px', borderRadius: '50%', background: '#fff', left: '0%', boxShadow: '0 2px 8px rgba(0,0,0,0.4)' } });
+  const seekBar = el('div', { style: { height: '20px', background: 'transparent', position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center' } });
+  const seekTrack = el('div', { style: { position: 'absolute', left: '0', right: '0', height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.12)' } });
+  const seekFill = el('div', { id: 'np-seek-fill', style: { position: 'absolute', left: '0', top: '8px', height: '4px', borderRadius: '2px', background: '#fff', width: '0%' } });
+  const seekThumb = el('div', { id: 'np-seek-thumb', style: { position: 'absolute', top: '50%', transform: 'translate(-50%,-50%)', width: '18px', height: '18px', borderRadius: '50%', background: '#fff', left: '0%', boxShadow: '0 2px 8px rgba(0,0,0,0.5)', zIndex: '2' } });
+  seekBar.appendChild(seekTrack);
   seekBar.appendChild(seekFill);
   seekBar.appendChild(seekThumb);
-  function handleSeek(e) {
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const rect = seekBar.getBoundingClientRect();
-    seekAudio(getActiveShift(), Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)));
+
+  if (window._seekCleanup) window._seekCleanup();
+  let _seekDrag = false;
+  function _seekPct(clientX) {
+    const r = seekBar.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (clientX - r.left) / r.width));
   }
-  seekBar.addEventListener('click', handleSeek);
-  seekBar.addEventListener('touchstart', handleSeek, { passive: true });
+  function _seekVisual(pct) {
+    seekFill.style.width = (pct * 100) + '%';
+    seekThumb.style.left = (pct * 100) + '%';
+  }
+  const _onMove = (e) => { if (_seekDrag) _seekVisual(_seekPct(e.clientX)); };
+  const _onUp = (e) => { if (!_seekDrag) return; _seekDrag = false; seekAudio(getActiveShift(), _seekPct(e.clientX)); };
+  document.addEventListener('mousemove', _onMove);
+  document.addEventListener('mouseup', _onUp);
+  window._seekCleanup = () => { document.removeEventListener('mousemove', _onMove); document.removeEventListener('mouseup', _onUp); };
+  seekBar.addEventListener('mousedown', (e) => { _seekDrag = true; _seekVisual(_seekPct(e.clientX)); e.preventDefault(); });
+  seekBar.addEventListener('touchstart', (e) => { _seekDrag = true; _seekVisual(_seekPct(e.touches[0].clientX)); e.preventDefault(); }, { passive: false });
+  seekBar.addEventListener('touchmove', (e) => { if (_seekDrag) { _seekVisual(_seekPct(e.touches[0].clientX)); e.preventDefault(); } }, { passive: false });
+  seekBar.addEventListener('touchend', (e) => { if (!_seekDrag) return; _seekDrag = false; seekAudio(getActiveShift(), _seekPct(e.changedTouches[0].clientX)); });
   progressWrap.appendChild(seekBar);
   const timeRow = el('div', { style: { display: 'flex', justifyContent: 'space-between', marginTop: '6px' } });
   timeRow.appendChild(el('span', { id: 'np-time-cur', style: { fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontFamily: "'DM Mono',monospace" } }, '0:00'));
@@ -1517,8 +1545,8 @@ function renderNowPlaying() {
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       boxShadow: '0 8px 24px rgba(0,0,0,0.4)', flexShrink: '0',
     },
-    onClick: () => {
-      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    onClick: async () => {
+      if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
       if (isPlaying) { pauseAudio(); } else { resumeAudio(getActiveShift()); }
       updateNowPlayingAudioState();
     }

@@ -3,7 +3,7 @@
 // ============================================================
 
 // --- CONFIGURATION ---
-const SPOTIFY_CLIENT_ID = 'ef8275d6f8304dcf9c249ab85ca0a588';
+const SPOTIFY_CLIENT_ID = '79aec5760952452f877b9d1fcb3ff9a6';
 const REDIRECT_URI = 'https://nolimusic.netlify.app';
 const SCOPES = 'user-library-read playlist-read-private user-follow-read user-read-private user-read-email';
 

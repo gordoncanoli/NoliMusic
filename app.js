@@ -707,9 +707,13 @@ function renderLibrary() {
   const header = el('div', { className: 'lib-header' },
     el('div', { className: 'lib-logo' }, 'Noli', el('span', {}, 'Music')),
     el('div', { style: { padding: '0 0 6px' } },
-      el('div', { className: 'search-bar' },
-        searchIcon(),
-        el('input', {
+      (() => {
+        const bar = el('div', { className: 'search-bar' });
+        const iconWrap = document.createElement('span');
+        iconWrap.style.display = 'inline-flex';
+        iconWrap.innerHTML = searchIcon();
+        bar.appendChild(iconWrap);
+        bar.appendChild(el('input', {
           className: 'search-input',
           type: 'text',
           placeholder: 'Songs, artists, playlists…',
@@ -718,8 +722,9 @@ function renderLibrary() {
             state.searchQuery = e.target.value;
             doSearch(e.target.value);
           }
-        })
-      )
+        }));
+        return bar;
+      })()
     )
   );
 

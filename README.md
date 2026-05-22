@@ -1,6 +1,6 @@
 # NoliMusic 🎸
 
-Play any song on guitar — no capo needed.
+Play any song on guitar, no capo needed.
 
 ## Setup Instructions
 

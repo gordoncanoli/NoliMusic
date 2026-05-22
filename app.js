@@ -489,7 +489,7 @@ function renderLogin() {
       marginBottom: '60px',
       maxWidth: '260px',
     })
-  }, 'Play any song on guitar — no capo needed.');
+  }, 'Play any song on guitar, no capo needed.');
 
   const loginBtn = el('button', {
     style: css({

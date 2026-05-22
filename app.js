@@ -12,7 +12,7 @@
 // ============================================================
 
 // ─── SPOTIFY CONFIG ──────────────────────────────────────────
-const CLIENT_ID = 'YOUR_SPOTIFY_CLIENT_ID';
+const CLIENT_ID = 'ef8275d6f8304dcf9c249ab85ca0a588';
 const REDIRECT_URI = window.location.origin + '/';
 const SCOPES = 'user-library-read playlist-read-private user-follow-read';
 

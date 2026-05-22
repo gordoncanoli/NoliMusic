@@ -1,6 +1,6 @@
 [[headers]]
   for = "/*"
   [headers.values]
-    Content-Security-Policy = "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.spotify.com https://api.spotify.com https://fonts.googleapis.com https://fonts.gstatic.com; media-src 'self' blob: data:;"
+    Content-Security-Policy = "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.spotify.com https://api.spotify.com https://fonts.googleapis.com https://fonts.gstatic.com; media-src 'self' blob: data:; img-src 'self' https://i.scdn.co https://mosaic.scdn.co https://image-cdn-ak.spotifycdn.com https://image-cdn-fa.spotifycdn.com https://lineup-images.scdn.co data: blob:;"
     X-Frame-Options = "SAMEORIGIN"
     Access-Control-Allow-Origin = "*"

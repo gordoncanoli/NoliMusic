@@ -2,6 +2,18 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Product Purpose
+
+NoliMusic is a web app for beginner guitarists and musicians who want to build intuition for chord progressions through ear training.
+
+**The problem it solves:** Learning which chords belong together — and recognizing that the same chord progression appears across many songs in different keys — is hard to grasp abstractly. NoliMusic makes this intuitive by shifting popular songs (pulled from the user's Spotify library) into G major/minor, the easiest key for guitar and piano (open chords, minimal finger movement). As users play along to songs they already know and love, they begin to internalize chord relationships organically over time, without formal theory instruction.
+
+**Why G major:** It's the most beginner-friendly guitar key. The primary open chords (G, C, D, Em) are simple to finger and widely used, making it the natural home base for new players.
+
+**Noli** is the app's brand name.
+
+---
+
 ## Development Instructions
 
 Always push changes to `main` after every change is made.

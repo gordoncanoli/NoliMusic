@@ -2,6 +2,59 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Product Purpose
+
+NoliMusic is a web app for beginner guitarists and musicians who want to build intuition for chord progressions through ear training.
+
+**The problem it solves:** Learning which chords belong together — and recognizing that the same chord progression appears across many songs in different keys — is hard to grasp abstractly. NoliMusic makes this intuitive by shifting popular songs (pulled from the user's Spotify library) into G major/minor, the easiest key for guitar and piano (open chords, minimal finger movement). As users play along to songs they already know and love, they begin to internalize chord relationships organically over time, without formal theory instruction.
+
+**Why G major:** It's the most beginner-friendly guitar key. The primary open chords (G, C, D, Em) are simple to finger and widely used, making it the natural home base for new players.
+
+**Noli** is the app's brand name.
+
+---
+
+## Audio Architecture & Scale Strategy
+
+### Current State (POC)
+The current implementation uses 10 local MP3 files bundled in the repo. This is a proof of concept only and is not the intended long-term architecture.
+
+### Target Scale
+The goal is a catalog of ~7,000 songs. Expanding the current local-file model to that scale is not viable — it would require manual downloads and significant storage costs.
+
+### Audio Source Decision: Original Covers
+The audio for the catalog will be **original cover recordings** made by the app's creator (a professional musician), not masters from streaming services.
+
+**Why not Spotify/Apple Music streams:** This was thoroughly investigated. No streaming service (Spotify, Apple Music) exposes raw audio data for real-time pitch shifting — DRM is enforced at the browser and OS level. Apps like Moises.ai and Stemz that offer pitch shifting also require users to import their own local files. There is no legal public API that allows pitch shifting of streamed catalog audio. This is a hard industry-wide constraint, not a solvable engineering problem.
+
+**Why original covers work well:**
+- Covers recorded directly in G major eliminate the need for pitch shifting entirely in Noli mode
+- Stripped-back, guitar-forward arrangements are purpose-built for the learning use case
+- The creator's musicianship is a product differentiator, not a compromise
+- Sound recordings are owned by the creator; only mechanical licenses are needed for the underlying compositions
+
+### Licensing Model for Covers
+To legally distribute cover recordings:
+- **Mechanical license** per song — required to record and distribute a cover of a copyrighted composition. Compulsory under US law (publishers cannot refuse). Statutory rate ~$0.091/stream. Handled via services like Songfile (Harry Fox Agency) or Easy Song Licensing.
+- **Public performance license** — required to stream music to app users. Annual blanket licenses from ASCAP, BMI, and/or SESAC. Typically a few hundred dollars/year for a small app.
+
+AI-assisted production is acceptable as a tool; AI that mimics a specific original artist's voice or style is not.
+
+### Key Detection at Scale
+The current `semitonsToG` field in `SONG_MANIFEST` is manually hardcoded. At scale, this should be replaced with automatic key detection using **Spotify's Audio Features API** (`GET /audio-features/{id}`), which returns the key and mode of any track in Spotify's catalog. This eliminates manual key entry entirely and scales to any matched song.
+
+### Future Architecture (Planned)
+- Audio files hosted on a CDN (e.g. Cloudflare R2 — ~$0–3/month for 7k songs at ~4MB each)
+- Server-side pitch shifting for manual/fine-tune modes (lightweight backend, ~$20–50/month)
+- Spotify integration remains for library matching and key auto-detection
+- Apple Music integration is a future goal
+- Demo mode (unauthenticated) using a small set of royalty-free or owned songs
+
+### Platform
+The current PWA architecture is the starting point. A native iOS app is a long-term consideration, particularly for Apple Music integration.
+
+---
+
 ## Development Instructions
 
 Always push changes to `main` after every change is made.
